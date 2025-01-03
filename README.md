@@ -6,7 +6,7 @@
 
 A simple mpd query parser for Rust.
 
-# Usage
+## Usage
 
 ```Rust
 let mut parser = Parser::new("Album == '10 Summers' && Artist == 'DJ Mustard'");
