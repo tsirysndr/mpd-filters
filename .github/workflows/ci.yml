@@ -1,4 +1,4 @@
-name: fluentci
+name: ci
 on:
   push:
     branches:
