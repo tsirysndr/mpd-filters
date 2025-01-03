@@ -1,4 +1,5 @@
-mpd-filters
+# mpd-filters
+
 [![fluentci](https://github.com/tsirysndr/mpd-filters/actions/workflows/ci.yml/badge.svg)](https://github.com/tsirysndr/mpd-filters/actions/workflows/ci.yml)
 [![downloads](https://img.shields.io/crates/dr/mpd-filters)](https://crates.io/crates/mpd-filters)
 [![crates](https://img.shields.io/crates/v/mpd-filters.svg)](https://crates.io/crates/mpd-filters)
