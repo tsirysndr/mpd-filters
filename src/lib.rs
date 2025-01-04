@@ -256,12 +256,20 @@ impl Parser {
         }
 
         let mut value = String::new();
+        let mut is_escaped = false;
+
         while let Some(c) = self.next() {
-            if c == '\'' {
-                return Ok(value);
+            if is_escaped {
+                value.push(c);
+                is_escaped = false;
+                continue;
             }
 
-            value.push(c);
+            match c {
+                '\\' => is_escaped = true,
+                '\'' => return Ok(value),
+                _ => value.push(c),
+            }
         }
 
         Err("Unterminated value".to_string())
@@ -402,6 +410,23 @@ mod tests {
             (
                 "album = $1 AND artist = $2".to_string(),
                 vec!["10 Summers".to_string(), "DJ Mustard".to_string()]
+            )
+        );
+    }
+    #[test]
+    fn test_escaped_str_to_sql() {
+        let mut parser = Parser::new(
+            "((Artist == 'Best DJ Collection') AND (Album == 'Discobitch \\(C\\'est Beau La Bourgeoisie\\)'))",
+        );
+        let result = parser.parse().unwrap();
+        assert_eq!(
+            result.to_sql(SqlOptions::default()),
+            (
+                "((artist = $1) AND (album = $2))".to_string(),
+                vec![
+                    "Best DJ Collection".to_string(),
+                    "Discobitch (C'est Beau La Bourgeoisie)".to_string()
+                ],
             )
         );
     }
