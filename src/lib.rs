@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[derive(Debug, PartialEq)]
 pub enum Operator {
     Equals,
@@ -38,18 +40,38 @@ impl Expression {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct SqlOptions {
+    pub columns: HashMap<String, String>,
+    pub file_prefix: Option<String>,
+}
+
+impl Default for SqlOptions {
+    fn default() -> Self {
+        let mut columns = HashMap::new();
+        columns.insert("Album".to_string(), "album".to_string());
+        columns.insert("Artist".to_string(), "artist".to_string());
+        columns.insert("Title".to_string(), "title".to_string());
+        columns.insert("File".to_string(), "file".to_string());
+        SqlOptions {
+            columns,
+            file_prefix: None,
+        }
+    }
+}
+
 pub trait ToSql {
-    fn to_sql(&self) -> (String, Vec<String>);
-    fn to_sql_internal(&self, params: &mut Vec<String>) -> String;
+    fn to_sql(&self, options: SqlOptions) -> (String, Vec<String>);
+    fn to_sql_internal(&self, params: &mut Vec<String>, options: SqlOptions) -> String;
 }
 
 impl ToSql for Expression {
-    fn to_sql(&self) -> (String, Vec<String>) {
+    fn to_sql(&self, options: SqlOptions) -> (String, Vec<String>) {
         let mut params = Vec::new();
-        let query = self.to_sql_internal(&mut params);
+        let query = self.to_sql_internal(&mut params, options);
         (query, params)
     }
-    fn to_sql_internal(&self, params: &mut Vec<String>) -> String {
+    fn to_sql_internal(&self, params: &mut Vec<String>, options: SqlOptions) -> String {
         match self {
             Expression::Comparaison { field, op, value } => {
                 let op_str = match op {
@@ -68,21 +90,34 @@ impl ToSql for Expression {
                         let pattern = format!("%{}%", value);
                         Self::create_param(&pattern, params)
                     }
-                    _ => Self::create_param(value, params),
+                    _ => {
+                        let value = match field.as_str() {
+                            "File" => {
+                                let file_prefix = options.file_prefix.as_deref().unwrap_or("");
+                                &format!("{}{}", file_prefix, value)
+                            }
+                            _ => value,
+                        };
+
+                        Self::create_param(value, params)
+                    }
                 };
 
-                format!("{} {} {}", field.to_lowercase(), op_str, param)
+                let cloned_options = options.clone();
+                let column = cloned_options.columns.get(field).unwrap_or(&field);
+
+                format!("{} {} {}", *column, op_str, param)
             }
             Expression::Logical { left, op, right } => {
-                let left_sql = left.to_sql_internal(params);
-                let right_sql = right.to_sql_internal(params);
+                let left_sql = left.to_sql_internal(params, options.clone());
+                let right_sql = right.to_sql_internal(params, options.clone());
 
                 match op {
                     LogicalOp::And => format!("{} AND {}", left_sql, right_sql),
                     LogicalOp::Or => format!("{} OR {}", left_sql, right_sql),
                 }
             }
-            Expression::Group(expr) => format!("({})", expr.to_sql_internal(params)),
+            Expression::Group(expr) => format!("({})", expr.to_sql_internal(params, options)),
         }
     }
 }
@@ -363,7 +398,7 @@ mod tests {
         let mut parser = Parser::new("Album == '10 Summers' && Artist == 'DJ Mustard'");
         let result = parser.parse().unwrap();
         assert_eq!(
-            result.to_sql(),
+            result.to_sql(SqlOptions::default()),
             (
                 "album = $1 AND artist = $2".to_string(),
                 vec!["10 Summers".to_string(), "DJ Mustard".to_string()]
@@ -376,7 +411,7 @@ mod tests {
         let mut parser = Parser::new("((Album == '10 Summers' && Artist == 'DJ Mustard') || (Album == 'Discovery' && Artist == 'Daft Punk'))");
         let result = parser.parse().unwrap();
         assert_eq!(
-            result.to_sql(),
+            result.to_sql(SqlOptions::default()),
             (
                 "((album = $1 AND artist = $2) OR (album = $3 AND artist = $4))".to_string(),
                 vec![
@@ -384,6 +419,31 @@ mod tests {
                     "DJ Mustard".to_string(),
                     "Discovery".to_string(),
                     "Daft Punk".to_string()
+                ]
+            )
+        );
+    }
+
+    #[test]
+    fn test_to_sql_options() {
+        let mut parser = Parser::new("Album == '10 Summers' AND Artist == 'DJ Mustard' AND File == '10 Summers/01. Low Low (feat. Nipsey Hussle, TeeCee, and RJ).mp3'");
+        let result = parser.parse().unwrap();
+        let mut columns = HashMap::new();
+        columns.insert("Album".to_string(), "album".to_string());
+        columns.insert("Artist".to_string(), "artist".to_string());
+        columns.insert("File".to_string(), "path".to_string());
+
+        assert_eq!(
+            result.to_sql(SqlOptions {
+                columns,
+                file_prefix: Some("/home/tsirysndr/Music/".to_string())
+            }),
+            (
+                "album = $1 AND artist = $2 AND path = $3".to_string(),
+                vec![
+                    "10 Summers".to_string(),
+                    "DJ Mustard".to_string(),
+                    "/home/tsirysndr/Music/10 Summers/01. Low Low (feat. Nipsey Hussle, TeeCee, and RJ).mp3".to_string()
                 ]
             )
         );
