@@ -31,6 +31,46 @@ pub enum Expression {
     Group(Box<Expression>),
 }
 
+pub trait ToSql {
+    fn to_sql(&self) -> String;
+}
+
+impl ToSql for Expression {
+    fn to_sql(&self) -> String {
+        match self {
+            Expression::Comparaison { field, op, value } => {
+                let op_str = match op {
+                    Operator::Equals => "=",
+                    Operator::NotEquals => "!=",
+                    Operator::LessThan => "<",
+                    Operator::GreaterThan => ">",
+                    Operator::LessEquals => "<=",
+                    Operator::GreaterEquals => ">=",
+                    Operator::Contains => "LIKE",
+                    Operator::NotContains => "NOT LIKE",
+                };
+
+                match op {
+                    Operator::Contains | Operator::NotContains => {
+                        format!("{} {} '%{}%'", field.to_lowercase(), op_str, value)
+                    }
+                    _ => format!("{} {} '{}'", field.to_lowercase(), op_str, value),
+                }
+            }
+            Expression::Logical { left, op, right } => {
+                let left_sql = left.to_sql();
+                let right_sql = right.to_sql();
+
+                match op {
+                    LogicalOp::And => format!("{} AND {}", left_sql, right_sql),
+                    LogicalOp::Or => format!("{} OR {}", left_sql, right_sql),
+                }
+            }
+            Expression::Group(expr) => format!("({})", expr.to_sql()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Parser {
     tokens: Vec<char>,
@@ -255,5 +295,35 @@ mod tests {
             Expression::Logical { op, .. } => assert_eq!(op, LogicalOp::And),
             _ => panic!("Expected logical expression"),
         }
+    }
+
+    #[test]
+    fn test_logical_or() {
+        let mut parser = Parser::new("Album == '10 Summers' || Artist == 'DJ Mustard'");
+        let result = parser.parse().unwrap();
+        match result {
+            Expression::Logical { op, .. } => assert_eq!(op, LogicalOp::Or),
+            _ => panic!("Expected logical expression"),
+        }
+    }
+
+    #[test]
+    fn test_to_sql() {
+        let mut parser = Parser::new("Album == '10 Summers' && Artist == 'DJ Mustard'");
+        let result = parser.parse().unwrap();
+        assert_eq!(
+            result.to_sql(),
+            "album = '10 Summers' AND artist = 'DJ Mustard'".to_string()
+        );
+    }
+
+    #[test]
+    fn test_grouped_to_sql() {
+        let mut parser = Parser::new("((Album == '10 Summers' && Artist == 'DJ Mustard') || (Album == 'Discovery' && Artist == 'Daft Punk'))");
+        let result = parser.parse().unwrap();
+        assert_eq!(
+            result.to_sql(),
+            "((album = '10 Summers' AND artist = 'DJ Mustard') OR (album = 'Discovery' AND artist = 'Daft Punk'))".to_string()
+        );
     }
 }

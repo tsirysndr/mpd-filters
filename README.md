@@ -11,7 +11,8 @@ A simple mpd query parser for Rust.
 ```rust
 let mut parser = Parser::new("Album == '10 Summers' && Artist == 'DJ Mustard'");
 match parser.parse() {
-  Ok(expr) => println!("Parsed expression: {:?}", expr),
+  Ok(expr) => println!("Parsed expression: {:?}\n sql: {}", expr, expr.to_sql()),
   Err(e) => panic!("Error parsing: {}", e),
 }
 ```
+
