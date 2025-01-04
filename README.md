@@ -9,7 +9,7 @@ A simple mpd query parser for Rust.
 ## Usage
 
 ```rust
-let mut parser = Parser::new("Album == '10 Summers' && Artist == 'DJ Mustard'");
+let mut parser = Parser::new("Album == '10 Summers' AND Artist == 'DJ Mustard'");
 match parser.parse() {
   Ok(expr) => println!("Parsed expression: {:?}\n sql: {}", expr, expr.to_sql()),
   Err(e) => panic!("Error parsing: {}", e),

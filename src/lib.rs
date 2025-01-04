@@ -219,18 +219,39 @@ impl Parser {
     fn parse_logical_op(&mut self) -> Option<LogicalOp> {
         self.skip_whitespace();
 
-        if self.position + 1 >= self.tokens.len() {
-            return None;
+        // Try to parse '&&' or '||' first
+        if self.position + 1 < self.tokens.len() {
+            match (self.tokens[self.position], self.tokens[self.position + 1]) {
+                ('&', '&') => {
+                    self.position += 2;
+                    self.skip_whitespace();
+                    return Some(LogicalOp::And);
+                }
+                ('|', '|') => {
+                    self.position += 2;
+                    self.skip_whitespace();
+                    return Some(LogicalOp::Or);
+                }
+                _ => {}
+            }
         }
 
-        match (self.tokens[self.position], self.tokens[self.position + 1]) {
-            ('&', '&') => {
-                self.position += 2;
+        let mut word = String::new();
+        // Try to parse 'AND' or 'OR'
+        while let Some(c) = self.peek() {
+            if c.is_alphabetic() {
+                word.push(self.next().unwrap())
+            } else {
+                break;
+            }
+        }
+
+        match word.to_uppercase().as_str() {
+            "AND" => {
                 self.skip_whitespace();
                 Some(LogicalOp::And)
             }
-            ('|', '|') => {
-                self.position += 2;
+            "OR" => {
                 self.skip_whitespace();
                 Some(LogicalOp::Or)
             }
@@ -295,11 +316,25 @@ mod tests {
             Expression::Logical { op, .. } => assert_eq!(op, LogicalOp::And),
             _ => panic!("Expected logical expression"),
         }
+
+        let mut parser = Parser::new("Album == '10 Summers' AND Artist == 'DJ Mustard'");
+        let result = parser.parse().unwrap();
+        match result {
+            Expression::Logical { op, .. } => assert_eq!(op, LogicalOp::And),
+            _ => panic!("Expected logical expression"),
+        }
     }
 
     #[test]
     fn test_logical_or() {
         let mut parser = Parser::new("Album == '10 Summers' || Artist == 'DJ Mustard'");
+        let result = parser.parse().unwrap();
+        match result {
+            Expression::Logical { op, .. } => assert_eq!(op, LogicalOp::Or),
+            _ => panic!("Expected logical expression"),
+        }
+
+        let mut parser = Parser::new("Album == '10 Summers' OR Artist == 'DJ Mustard'");
         let result = parser.parse().unwrap();
         match result {
             Expression::Logical { op, .. } => assert_eq!(op, LogicalOp::Or),
