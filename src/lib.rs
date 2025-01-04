@@ -31,12 +31,25 @@ pub enum Expression {
     Group(Box<Expression>),
 }
 
+impl Expression {
+    pub fn create_param(value: &str, params: &mut Vec<String>) -> String {
+        params.push(value.to_string());
+        format!("${}", params.len())
+    }
+}
+
 pub trait ToSql {
-    fn to_sql(&self) -> String;
+    fn to_sql(&self) -> (String, Vec<String>);
+    fn to_sql_internal(&self, params: &mut Vec<String>) -> String;
 }
 
 impl ToSql for Expression {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self) -> (String, Vec<String>) {
+        let mut params = Vec::new();
+        let query = self.to_sql_internal(&mut params);
+        (query, params)
+    }
+    fn to_sql_internal(&self, params: &mut Vec<String>) -> String {
         match self {
             Expression::Comparaison { field, op, value } => {
                 let op_str = match op {
@@ -50,23 +63,26 @@ impl ToSql for Expression {
                     Operator::NotContains => "NOT LIKE",
                 };
 
-                match op {
+                let param = match op {
                     Operator::Contains | Operator::NotContains => {
-                        format!("{} {} '%{}%'", field.to_lowercase(), op_str, value)
+                        let pattern = format!("%{}%", value);
+                        Self::create_param(&pattern, params)
                     }
-                    _ => format!("{} {} '{}'", field.to_lowercase(), op_str, value),
-                }
+                    _ => Self::create_param(value, params),
+                };
+
+                format!("{} {} {}", field.to_lowercase(), op_str, param)
             }
             Expression::Logical { left, op, right } => {
-                let left_sql = left.to_sql();
-                let right_sql = right.to_sql();
+                let left_sql = left.to_sql_internal(params);
+                let right_sql = right.to_sql_internal(params);
 
                 match op {
                     LogicalOp::And => format!("{} AND {}", left_sql, right_sql),
                     LogicalOp::Or => format!("{} OR {}", left_sql, right_sql),
                 }
             }
-            Expression::Group(expr) => format!("({})", expr.to_sql()),
+            Expression::Group(expr) => format!("({})", expr.to_sql_internal(params)),
         }
     }
 }
@@ -348,7 +364,10 @@ mod tests {
         let result = parser.parse().unwrap();
         assert_eq!(
             result.to_sql(),
-            "album = '10 Summers' AND artist = 'DJ Mustard'".to_string()
+            (
+                "album = $1 AND artist = $2".to_string(),
+                vec!["10 Summers".to_string(), "DJ Mustard".to_string()]
+            )
         );
     }
 
@@ -358,7 +377,15 @@ mod tests {
         let result = parser.parse().unwrap();
         assert_eq!(
             result.to_sql(),
-            "((album = '10 Summers' AND artist = 'DJ Mustard') OR (album = 'Discovery' AND artist = 'Daft Punk'))".to_string()
+            (
+                "((album = $1 AND artist = $2) OR (album = $3 AND artist = $4))".to_string(),
+                vec![
+                    "10 Summers".to_string(),
+                    "DJ Mustard".to_string(),
+                    "Discovery".to_string(),
+                    "Daft Punk".to_string()
+                ]
+            )
         );
     }
 }
