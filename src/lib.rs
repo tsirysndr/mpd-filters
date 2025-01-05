@@ -39,6 +39,31 @@ impl Expression {
         params.push(value.to_string());
         format!("${}", params.len())
     }
+
+    pub fn evaluate(&self, record: &HashMap<String, String>) -> bool {
+        match self {
+            Expression::Comparaison { field, op, value } => {
+                let empty = "".to_string();
+                let record_value = record.get(field).unwrap_or(&empty);
+                match op {
+                    Operator::Equals => record_value == value,
+                    Operator::NotEquals => record_value != value,
+                    Operator::Contains => record_value.contains(value),
+                    Operator::NotContains => !record_value.contains(value),
+                    Operator::Matches => {
+                        let re = regex::Regex::new(value).unwrap();
+                        re.is_match(record_value)
+                    }
+                    _ => false,
+                }
+            }
+            Expression::Logical { left, op, right } => match op {
+                LogicalOp::And => left.evaluate(record) && right.evaluate(record),
+                LogicalOp::Or => left.evaluate(record) || right.evaluate(record),
+            },
+            Expression::Group(expr) => expr.evaluate(record),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -489,5 +514,32 @@ mod tests {
                 value: ".*Daft.*".to_string(),
             }
         )
+    }
+
+    #[test]
+    fn test_evaluate() {
+        let mut record = HashMap::new();
+        record.insert("Album".to_string(), "Random Access Memories".to_string());
+        record.insert("Artist".to_string(), "Daft Punk".to_string());
+        record.insert(
+            "File".to_string(),
+            "/home/tsirysndr/Music/Random Access Memories/01. Give Life Back to Music.mp3"
+                .to_string(),
+        );
+        record.insert("Title".to_string(), "Give Life Back to Music".to_string());
+
+        let mut parser =
+            Parser::new("((Album == 'Random Access Memories') AND (Artist == 'Daft Punk'))");
+        let expr = parser.parse().unwrap();
+        assert_eq!(expr.evaluate(&record), true);
+
+        let mut parser =
+            Parser::new("((Album == 'Random Access Memories') AND (Artist == 'Daft Punky'))");
+        let expr = parser.parse().unwrap();
+        assert_eq!(expr.evaluate(&record), false);
+
+        let mut parser = Parser::new("((Artist =~ '.*Daft.*'))");
+        let expr = parser.parse().unwrap();
+        assert_eq!(expr.evaluate(&record), true);
     }
 }
