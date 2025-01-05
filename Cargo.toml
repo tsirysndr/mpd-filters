@@ -1,12 +1,13 @@
 [package]
 name = "mpd-filters"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2021"
 authors = ["Tsiry Sandratraina <tsiry.sndr@fluentci.io>"]
 description = "A simple mpd query parser library for Rust"
 repository = "https://github.com/tsirysndr/mpd-filters"
 license = "MIT"
 readme = "README.md"
-keywords = ["mpd", "query", "parser"]
+keywords = ["mpd", "query", "parser", "regex"]
 
 [dependencies]
+regex = "1.11.1"
