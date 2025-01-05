@@ -10,6 +10,7 @@ pub enum Operator {
     GreaterEquals,
     Contains,
     NotContains,
+    Matches,
 }
 
 #[derive(Debug, PartialEq)]
@@ -83,6 +84,7 @@ impl ToSql for Expression {
                     Operator::GreaterEquals => ">=",
                     Operator::Contains => "LIKE",
                     Operator::NotContains => "NOT LIKE",
+                    Operator::Matches => "REGEXP",
                 };
 
                 let param = match op {
@@ -241,6 +243,7 @@ impl Parser {
             ">=" => Ok(Operator::GreaterEquals),
             "contains" => Ok(Operator::Contains),
             "!contains" => Ok(Operator::NotContains),
+            "=~" => Ok(Operator::Matches),
             _ => {
                 self.position = start_pos;
                 Err(format!("Unknown operator: {}", op_str))
@@ -472,5 +475,19 @@ mod tests {
                 ]
             )
         );
+    }
+
+    #[test]
+    fn test_matches_operator() {
+        let mut parser = Parser::new("Artist =~ '.*Daft.*'");
+        let result = parser.parse().unwrap();
+        assert_eq!(
+            result,
+            Expression::Comparaison {
+                field: "Artist".to_string(),
+                op: Operator::Matches,
+                value: ".*Daft.*".to_string(),
+            }
+        )
     }
 }

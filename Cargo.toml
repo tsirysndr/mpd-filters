@@ -1,6 +1,6 @@
 [package]
 name = "mpd-filters"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 authors = ["Tsiry Sandratraina <tsiry.sndr@fluentci.io>"]
 description = "A simple mpd query parser library for Rust"
