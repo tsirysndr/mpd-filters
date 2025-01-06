@@ -133,15 +133,24 @@ impl ToSql for Expression {
                         Self::create_param(&pattern, params)
                     }
                     _ => {
+                        let mut param: String = String::from("");
                         let value = match field.as_str() {
                             "File" => {
+                                if let Some(prefix) = &options.file_prefix {
+                                    if value.starts_with(prefix) {
+                                        param = Self::create_param(value, params);
+                                    }
+                                }
                                 let file_prefix = options.file_prefix.as_deref().unwrap_or("");
                                 &format!("{}{}", file_prefix, value)
                             }
                             _ => value,
                         };
 
-                        Self::create_param(value, params)
+                        if param.is_empty() {
+                            param = Self::create_param(value, params);
+                        }
+                        param
                     }
                 };
 
@@ -560,5 +569,30 @@ mod tests {
         let mut parser = Parser::new("((any =~ '.*Daft.*'))");
         let expr = parser.parse().unwrap();
         assert_eq!(expr.evaluate(&record), true);
+    }
+
+    #[test]
+    fn test_prefix() {
+        let mut parser = Parser::new("Album == '10 Summers' AND Artist == 'DJ Mustard' AND File == '/home/tsirysndr/Music/10 Summers/01. Low Low (feat. Nipsey Hussle, TeeCee, and RJ).mp3'");
+        let result = parser.parse().unwrap();
+        let mut columns = HashMap::new();
+        columns.insert("Album".to_string(), "album".to_string());
+        columns.insert("Artist".to_string(), "artist".to_string());
+        columns.insert("File".to_string(), "path".to_string());
+
+        assert_eq!(
+            result.to_sql(SqlOptions {
+                columns,
+                file_prefix: Some("/home/tsirysndr/Music/".to_string())
+            }),
+            (
+                "album = $1 AND artist = $2 AND path = $3".to_string(),
+                vec![
+                    "10 Summers".to_string(),
+                    "DJ Mustard".to_string(),
+                    "/home/tsirysndr/Music/10 Summers/01. Low Low (feat. Nipsey Hussle, TeeCee, and RJ).mp3".to_string()
+                ]
+            )
+        );
     }
 }
