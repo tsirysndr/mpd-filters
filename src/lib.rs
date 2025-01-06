@@ -44,6 +44,21 @@ impl Expression {
         match self {
             Expression::Comparaison { field, op, value } => {
                 let empty = "".to_string();
+
+                if field.to_lowercase() == "any" {
+                    return record.values().any(|v| match op {
+                        Operator::Equals => v == value,
+                        Operator::NotEquals => v != value,
+                        Operator::Contains => v.contains(value),
+                        Operator::NotContains => !v.contains(value),
+                        Operator::Matches => {
+                            let re = regex::Regex::new(value).unwrap();
+                            re.is_match(v)
+                        }
+                        _ => false,
+                    });
+                }
+
                 let record_value = record.get(field).unwrap_or(&empty);
                 match op {
                     Operator::Equals => record_value == value,
@@ -539,6 +554,10 @@ mod tests {
         assert_eq!(expr.evaluate(&record), false);
 
         let mut parser = Parser::new("((Artist =~ '.*Daft.*'))");
+        let expr = parser.parse().unwrap();
+        assert_eq!(expr.evaluate(&record), true);
+
+        let mut parser = Parser::new("((any =~ '.*Daft.*'))");
         let expr = parser.parse().unwrap();
         assert_eq!(expr.evaluate(&record), true);
     }
