@@ -40,7 +40,7 @@ impl Expression {
         format!("${}", params.len())
     }
 
-    pub fn evaluate(&self, record: &HashMap<String, String>) -> bool {
+    pub fn evaluate(&self, record: &HashMap<String, String>, case_sensitive: bool) -> bool {
         match self {
             Expression::Comparaison { field, op, value } => {
                 let empty = "".to_string();
@@ -52,7 +52,10 @@ impl Expression {
                         Operator::Contains => v.contains(value),
                         Operator::NotContains => !v.contains(value),
                         Operator::Matches => {
-                            let re = regex::Regex::new(value).unwrap();
+                            let re = regex::RegexBuilder::new(value)
+                                .case_insensitive(!case_sensitive)
+                                .build()
+                                .unwrap();
                             re.is_match(v)
                         }
                         _ => false,
@@ -73,10 +76,14 @@ impl Expression {
                 }
             }
             Expression::Logical { left, op, right } => match op {
-                LogicalOp::And => left.evaluate(record) && right.evaluate(record),
-                LogicalOp::Or => left.evaluate(record) || right.evaluate(record),
+                LogicalOp::And => {
+                    left.evaluate(record, case_sensitive) && right.evaluate(record, case_sensitive)
+                }
+                LogicalOp::Or => {
+                    left.evaluate(record, case_sensitive) || right.evaluate(record, case_sensitive)
+                }
             },
-            Expression::Group(expr) => expr.evaluate(record),
+            Expression::Group(expr) => expr.evaluate(record, case_sensitive),
         }
     }
 }
@@ -555,20 +562,28 @@ mod tests {
         let mut parser =
             Parser::new("((Album == 'Random Access Memories') AND (Artist == 'Daft Punk'))");
         let expr = parser.parse().unwrap();
-        assert_eq!(expr.evaluate(&record), true);
+        assert_eq!(expr.evaluate(&record, false), true);
 
         let mut parser =
             Parser::new("((Album == 'Random Access Memories') AND (Artist == 'Daft Punky'))");
         let expr = parser.parse().unwrap();
-        assert_eq!(expr.evaluate(&record), false);
+        assert_eq!(expr.evaluate(&record, false), false);
 
         let mut parser = Parser::new("((Artist =~ '.*Daft.*'))");
         let expr = parser.parse().unwrap();
-        assert_eq!(expr.evaluate(&record), true);
+        assert_eq!(expr.evaluate(&record, true), true);
 
         let mut parser = Parser::new("((any =~ '.*Daft.*'))");
         let expr = parser.parse().unwrap();
-        assert_eq!(expr.evaluate(&record), true);
+        assert_eq!(expr.evaluate(&record, true), true);
+
+        let mut parser = Parser::new("((any =~ '.*daft.*'))");
+        let expr = parser.parse().unwrap();
+        assert_eq!(expr.evaluate(&record, false), true);
+
+        let mut parser = Parser::new("((any =~ '.*daft.*'))");
+        let expr = parser.parse().unwrap();
+        assert_eq!(expr.evaluate(&record, true), false);
     }
 
     #[test]
